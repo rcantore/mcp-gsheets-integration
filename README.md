@@ -57,7 +57,7 @@ A Model Context Protocol (MCP) server that provides AI agents with comprehensive
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/mcp-gsheets-integration.git
+git clone https://github.com/rcantore/mcp-gsheets-integration.git
 cd mcp-gsheets-integration
 
 # Install dependencies
