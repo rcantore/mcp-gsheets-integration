@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "gsheets": {
+      "command": "/usr/local/bin/node",
+      "args": ["/path/to/mcp-gsheets-integration/dist/index.js"],
+      "env": {
+        "GOOGLE_CLIENT_ID": "your-client-id.apps.googleusercontent.com",
+        "GOOGLE_CLIENT_SECRET": "your-client-secret",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}

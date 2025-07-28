@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  mcp-gsheets:
+    build: .
+    environment:
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - LOG_LEVEL=info
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"  # For OAuth callback
+    volumes:
+      - ./oauth-tokens:/app/.oauth-tokens.json:rw
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
