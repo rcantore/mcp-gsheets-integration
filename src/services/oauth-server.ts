@@ -16,7 +16,7 @@ export class OAuthServer {
     );
   }
 
-  async startAuthFlow(): Promise<{ authUrl: string; tokens: any }> {
+  generateAuthUrl(): string {
     const scopes = [
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive.readonly',
@@ -30,6 +30,11 @@ export class OAuthServer {
     });
 
     logger.info('OAuth authorization URL generated', { authUrl });
+    return authUrl;
+  }
+
+  async startAuthFlow(): Promise<{ authUrl: string; tokens: any }> {
+    const authUrl = this.generateAuthUrl();
 
     return new Promise((resolve, reject) => {
       this.server = http.createServer(async (req, res) => {

@@ -111,10 +111,13 @@ On first use, the server will:
 
 1. Start a local OAuth2 callback server on port 3000
 2. Generate an authorization URL
-3. Display the URL in the server logs
-4. Wait for you to authorize the application in your browser
-5. Store the access and refresh tokens locally in `.oauth-tokens.json`
-6. Automatically refresh tokens as needed for subsequent requests
+3. **Automatically open the URL in your default browser** 🚀
+4. If browser opening fails, display the URL in the server logs as fallback
+5. Wait for you to authorize the application in your browser
+6. Store the access and refresh tokens locally in `.oauth-tokens.json`
+7. Automatically refresh tokens as needed for subsequent requests
+
+**New in v1.1.0**: The server now automatically opens your default browser during OAuth flow, eliminating the need to manually copy-paste URLs. If automatic browser opening fails, the server gracefully falls back to displaying the URL in the console. This enhancement works seamlessly across all MCP clients (Claude Desktop, GitHub Copilot, Microsoft Copilot Studio, Continue, Cursor, and more).
 
 ## Available Tools
 
@@ -228,6 +231,12 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Changelog
+
+### v1.1.0
+- **NEW**: Automatic browser opening during OAuth flow
+- **NEW**: Universal MCP client compatibility (Claude Desktop, GitHub Copilot, etc.)
+- **ENHANCED**: Improved error handling with graceful fallbacks
+- **ENHANCED**: Better logging and user experience
 
 ### v1.0.0
 - Initial release
