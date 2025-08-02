@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { BrowserLauncherService } from '../utils/browser-launcher.js';
 import { OAuthServer } from './oauth-server.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -10,6 +11,7 @@ const TOKENS_FILE = path.join(process.cwd(), '.oauth-tokens.json');
 export class GoogleAuthService {
   private oauth2Client: InstanceType<typeof google.auth.OAuth2>;
   private oauthServer: OAuthServer;
+  private browserLauncher: BrowserLauncherService;
 
   constructor() {
     this.oauth2Client = new google.auth.OAuth2(
@@ -18,6 +20,7 @@ export class GoogleAuthService {
       config.googleRedirectUri
     );
     this.oauthServer = new OAuthServer();
+    this.browserLauncher = new BrowserLauncherService();
     this.initializeAuth();
   }
 
@@ -83,12 +86,15 @@ export class GoogleAuthService {
   private async authenticate(): Promise<void> {
     try {
       logger.info('Starting OAuth authentication flow...');
-      const { authUrl, tokens } = await this.oauthServer.startAuthFlow();
       
-      console.error('\n🔐 Google OAuth Authentication Required');
-      console.error('📋 Please open this URL in your browser to authorize the application:');
-      console.error(`\n${authUrl}\n`);
-      console.error('⏳ Waiting for authorization...');
+      // Generate the auth URL first
+      const authUrl = this.oauthServer.generateAuthUrl();
+      
+      // Immediately open browser with the URL
+      await this.browserLauncher.openUrl(authUrl);
+      
+      // Now start the auth flow and wait for completion
+      const { tokens } = await this.oauthServer.startAuthFlow();
 
       this.oauth2Client.setCredentials(tokens);
       await this.saveTokens(tokens);
