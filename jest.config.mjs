@@ -20,9 +20,14 @@ export default {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^open$': '<rootDir>/tests/mocks/open.ts',
+    '^@modelcontextprotocol/sdk/types\\.js$': '<rootDir>/tests/mocks/mcp-sdk.ts',
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(@modelcontextprotocol|open)/)'
+  ],
   verbose: true,
   testTimeout: 10000,
 }

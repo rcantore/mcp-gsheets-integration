@@ -97,8 +97,7 @@ describe('GoogleAuthService', () => {
 
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('.oauth-tokens.json'),
-        expect.stringContaining('"access_token"'),
-        { encoding: undefined }
+        expect.stringContaining('"access_token"')
       );
     });
 

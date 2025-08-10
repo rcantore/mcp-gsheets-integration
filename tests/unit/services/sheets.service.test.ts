@@ -90,7 +90,7 @@ describe('GoogleSheetsService', () => {
         files: { list: mockList }
       } as any);
 
-      const request = { query: 'test', maxResults: 10 };
+      const request = { query: 'test', maxResults: 10, orderBy: 'modifiedTime' as const };
       await sheetsService.findSheets(request);
 
       expect(mockList).toHaveBeenCalledWith({
