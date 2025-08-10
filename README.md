@@ -1,5 +1,7 @@
 [![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rcantore-mcp-gsheets-integration-badge.png)](https://mseep.ai/app/rcantore-mcp-gsheets-integration)
 
+[![Verified on MSeeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/0144049d-2a02-435c-8f64-754951908ebc)
+
 # MCP Google Sheets Server
 
 A Model Context Protocol (MCP) server that provides AI agents with comprehensive Google Sheets integration capabilities. This server enables AI assistants like Claude to read, create, update, and manage Google Sheets through the Google Sheets API and Google Drive API.
