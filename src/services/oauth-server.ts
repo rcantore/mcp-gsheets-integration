@@ -1,6 +1,13 @@
 import http from 'http';
 import url from 'url';
 import { google } from 'googleapis';
+
+type OAuthTokens = {
+  access_token?: string | null;
+  refresh_token?: string | null;
+  expiry_date?: number | null;
+  [key: string]: any;
+};
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -33,7 +40,7 @@ export class OAuthServer {
     return authUrl;
   }
 
-  async startAuthFlow(): Promise<{ authUrl: string; tokens: any }> {
+  async startAuthFlow(): Promise<{ authUrl: string; tokens: OAuthTokens }> {
     const authUrl = this.generateAuthUrl();
 
     return new Promise((resolve, reject) => {
@@ -94,7 +101,7 @@ export class OAuthServer {
     });
   }
 
-  setTokens(tokens: any): void {
+  setTokens(tokens: OAuthTokens): void {
     this.oauth2Client.setCredentials(tokens);
     logger.info('OAuth tokens set successfully');
   }

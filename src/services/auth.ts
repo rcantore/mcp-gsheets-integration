@@ -1,4 +1,11 @@
 import { google } from 'googleapis';
+
+type OAuthTokens = {
+  access_token?: string | null;
+  refresh_token?: string | null;
+  expiry_date?: number | null;
+  [key: string]: any;
+};
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { BrowserLauncherService } from '../utils/browser-launcher.js';
@@ -46,7 +53,7 @@ export class GoogleAuthService {
     }
   }
 
-  private async saveTokens(tokens: any): Promise<void> {
+  private async saveTokens(tokens: OAuthTokens): Promise<void> {
     try {
       await fs.writeFile(TOKENS_FILE, JSON.stringify(tokens, null, 2));
       logger.info('OAuth tokens saved to disk');
