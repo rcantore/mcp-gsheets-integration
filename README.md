@@ -10,11 +10,11 @@ A Model Context Protocol (MCP) server that provides AI agents with comprehensive
 
 **IMPORTANT**: This server requires access to your Google Drive and Google Sheets data. By using this server, you are granting the connected AI assistant the ability to:
 
-- Read all your Google Sheets files
-- Access file metadata and sharing permissions
+- Search for Google Sheets files you own or have access to
+- Read sheet content and metadata
 - Create new Google Sheets documents
 - Modify existing sheet content
-- Delete Google Sheets files
+- Move Google Sheets to trash (not permanently deleted)
 
 **Recommendations:**
 - Only use this server in trusted environments
@@ -25,13 +25,30 @@ A Model Context Protocol (MCP) server that provides AI agents with comprehensive
 
 ## Features
 
+### 13 MCP Tools
 - **Find Sheets**: Search for Google Sheets in Google Drive by name or metadata
 - **Read Data**: Retrieve data from specific ranges in Google Sheets
 - **Create Sheets**: Generate new Google Sheets with custom configurations
-- **Update Data**: Modify cell values and ranges in existing sheets
-- **Delete Sheets**: Remove Google Sheets from Google Drive
-- **OAuth2 Authentication**: Secure user authentication flow
-- **Token Management**: Automatic token refresh and persistent storage
+- **Update Data**: Modify cell values and ranges with formula support (`USER_ENTERED`)
+- **Delete Sheets**: Move Google Sheets to trash (recoverable)
+- **Append Values**: Add rows to a sheet without knowing the last row
+- **Clear Range**: Clear cell contents without deleting structure
+- **Batch Get**: Read multiple ranges in a single API call
+- **Batch Update**: Write to multiple ranges in a single API call
+- **Spreadsheet Info**: Get full metadata including all tabs and named ranges
+- **Add/Delete/Rename Sheet Tabs**: Manage individual tabs within a spreadsheet
+
+### MCP Resources & Prompts
+- **Resources**: Sheets exposed as `sheet://{sheetId}` URIs for direct content inspection
+- **Prompts**: Built-in templates for common workflows (`analyze_sheet_data`, `create_report_template`)
+
+### Security & Authentication
+- **OAuth2 with PKCE (S256)** and CSRF state validation
+- **Secure token storage** at `~/.config/mcp-gsheets-server/` with restricted file permissions
+- **Localhost-only** OAuth callback server
+- **Minimal scopes**: `spreadsheets` + `drive.file` only
+- **Input validation**: All tool inputs validated with Zod schemas
+- **Automatic token refresh** and persistent storage
 
 ## Prerequisites
 
@@ -79,8 +96,9 @@ Create a `.env` file in the project root:
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:3000/oauth/callback
+PORT=3000
 MCP_SERVER_NAME=gsheets-server
-MCP_SERVER_VERSION=1.0.0
+MCP_SERVER_VERSION=1.2.0
 LOG_LEVEL=info
 NODE_ENV=production
 ```
@@ -113,15 +131,14 @@ Replace `/path/to/node` with your Node.js installation path (find with `which no
 
 On first use, the server will:
 
-1. Start a local OAuth2 callback server on port 3000
-2. Generate an authorization URL
-3. **Automatically open the URL in your default browser** 🚀
+1. Start a local OAuth2 callback server on `127.0.0.1:3000`
+2. Generate an authorization URL with PKCE (S256) challenge and CSRF state parameter
+3. Automatically open the URL in your default browser
 4. If browser opening fails, display the URL in the server logs as fallback
 5. Wait for you to authorize the application in your browser
-6. Store the access and refresh tokens locally in `.oauth-tokens.json`
-7. Automatically refresh tokens as needed for subsequent requests
-
-**New in v1.1.0**: The server now automatically opens your default browser during OAuth flow, eliminating the need to manually copy-paste URLs. If automatic browser opening fails, the server gracefully falls back to displaying the URL in the console. This enhancement works seamlessly across all MCP clients (Claude Desktop, GitHub Copilot, Microsoft Copilot Studio, Continue, Cursor, and more).
+6. Validate the CSRF state and exchange the authorization code with PKCE verification
+7. Store tokens securely at `~/.config/mcp-gsheets-server/oauth-tokens.json` (permissions `0600`)
+8. Automatically refresh tokens as needed for subsequent requests
 
 ## Available Tools
 
@@ -130,22 +147,22 @@ Search for Google Sheets in Google Drive.
 
 **Parameters:**
 - `query` (optional): Search term to filter sheets by name
-- `maxResults` (optional): Maximum number of results (default: 10)
-- `orderBy` (optional): Sort order - 'name', 'createdTime', or 'modifiedTime' (default: 'modifiedTime')
+- `maxResults` (optional): Maximum number of results (1-100, default: 10)
+- `orderBy` (optional): Sort order - `name`, `createdTime`, or `modifiedTime` (default: `modifiedTime`)
 
 ### get_sheet_data
 Retrieve data from a Google Sheet.
 
 **Parameters:**
 - `sheetId` (required): The Google Sheet ID
-- `range` (optional): Cell range (e.g., "A1:C10")
+- `range` (optional): Cell range (e.g., `A1:C10`, default: `A1:Z1000`)
 
 ### create_sheet
 Create a new Google Sheet.
 
 **Parameters:**
 - `title` (required): Sheet title
-- `sheets` (optional): Array of sheet tabs to create
+- `sheets` (optional): Array of sheet tabs with optional `name`, `rowCount`, `columnCount`
 
 ### update_sheet
 Update data in a Google Sheet.
@@ -154,13 +171,75 @@ Update data in a Google Sheet.
 - `sheetId` (required): The Google Sheet ID
 - `range` (required): Cell range to update
 - `values` (required): 2D array of cell values
-- `majorDimension` (optional): 'ROWS' or 'COLUMNS'
+- `majorDimension` (optional): `ROWS` or `COLUMNS`
+- `valueInputOption` (optional): `RAW` or `USER_ENTERED` (default: `RAW`). Use `USER_ENTERED` for formulas.
 
 ### delete_sheet
-Delete a Google Sheet.
+Move a Google Sheet to trash.
 
 **Parameters:**
-- `sheetId` (required): The Google Sheet ID to delete
+- `sheetId` (required): The Google Sheet ID to trash
+
+### append_values
+Append rows to a sheet without knowing the last row.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+- `range` (required): Target range (e.g., `Sheet1!A:A`)
+- `values` (required): 2D array of row values
+- `valueInputOption` (optional): `RAW` or `USER_ENTERED` (default: `RAW`)
+
+### clear_range
+Clear cell contents without deleting the sheet structure.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+- `range` (required): Range to clear (e.g., `A1:C10`)
+
+### batch_get
+Read multiple ranges in a single API call.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+- `ranges` (required): Array of range strings
+
+### batch_update
+Write to multiple ranges in a single API call.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+- `data` (required): Array of `{ range, values }` objects
+- `valueInputOption` (optional): `RAW` or `USER_ENTERED` (default: `RAW`)
+
+### get_spreadsheet_info
+Get full spreadsheet metadata including all tabs and named ranges.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+
+### add_sheet_tab
+Add a new tab to an existing spreadsheet.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+- `title` (required): New tab title
+- `rowCount` (optional): Number of rows (1-10000)
+- `columnCount` (optional): Number of columns (1-702)
+
+### delete_sheet_tab
+Delete a tab from a spreadsheet.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+- `tabId` (required): Numeric tab ID (from `get_spreadsheet_info`)
+
+### rename_sheet_tab
+Rename an existing tab.
+
+**Parameters:**
+- `sheetId` (required): The Google Sheet ID
+- `tabId` (required): Numeric tab ID
+- `newTitle` (required): New tab title
 
 ## Development
 
@@ -196,7 +275,7 @@ mcp-inspector node dist/index.js
 - Verify your OAuth2 credentials are correct
 - Check that redirect URI matches exactly: `http://localhost:3000/oauth/callback`
 - Ensure required APIs are enabled in Google Cloud Console
-- Try deleting `.oauth-tokens.json` to force re-authentication
+- Try deleting `~/.config/mcp-gsheets-server/oauth-tokens.json` to force re-authentication
 
 ### Connection Issues
 - Verify Node.js path is correct in Claude Desktop configuration
@@ -213,17 +292,24 @@ mcp-inspector node dist/index.js
 
 - **TypeScript**: Full type safety with strict compiler settings
 - **Google APIs**: Official googleapis client library
-- **MCP SDK**: Official Model Context Protocol implementation
-- **OAuth2**: Secure user authentication with automatic token refresh
-- **Error Handling**: Comprehensive error handling with custom error types
+- **MCP SDK**: Official Model Context Protocol implementation (Tools, Resources, Prompts)
+- **OAuth2 + PKCE**: Secure user authentication with S256 code challenge and CSRF state
+- **Zod Validation**: All tool inputs validated with schemas and bounds
+- **Error Handling**: Comprehensive error handling with sanitized messages
 - **Logging**: Structured logging with configurable levels
+- **esbuild**: Fast bundling for production
 
 ## Security Considerations
 
-- OAuth2 tokens are stored locally in `.oauth-tokens.json`
+- OAuth2 tokens stored at `~/.config/mcp-gsheets-server/oauth-tokens.json` with `0600` permissions
+- PKCE (S256) prevents authorization code interception
+- CSRF state parameter prevents cross-site request forgery
+- OAuth callback server binds to `127.0.0.1` only (not accessible from network)
+- Minimal OAuth scopes: `spreadsheets` + `drive.file` (no broad Drive access)
 - All API requests use HTTPS
-- No credentials are logged or exposed in error messages
-- Token refresh is handled automatically
+- Error messages sanitized — no internal API details leaked
+- Delete operations use trash (recoverable) instead of permanent deletion
+- All tool inputs validated with Zod schemas including bounds
 - Server only accepts connections via MCP protocol (no HTTP endpoints)
 
 ## Contributing
@@ -236,15 +322,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.1.0
-- **NEW**: Automatic browser opening during OAuth flow
-- **NEW**: Universal MCP client compatibility (Claude Desktop, GitHub Copilot, etc.)
-- **ENHANCED**: Improved error handling with graceful fallbacks
-- **ENHANCED**: Better logging and user experience
-
-### v1.0.0
-- Initial release
-- OAuth2 authentication support
-- Full CRUD operations for Google Sheets
-- MCP protocol integration
-- Automatic token management
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
