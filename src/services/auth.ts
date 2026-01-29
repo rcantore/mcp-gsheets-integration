@@ -1,61 +1,65 @@
 import { google } from 'googleapis';
-
-type OAuthTokens = {
-  access_token?: string | null;
-  refresh_token?: string | null;
-  expiry_date?: number | null;
-  [key: string]: any;
-};
+import type { OAuthTokens } from '../types/auth.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { BrowserLauncherService } from '../utils/browser-launcher.js';
 import { OAuthServer } from './oauth-server.js';
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
-const TOKENS_FILE = path.join(process.cwd(), '.oauth-tokens.json');
+function getTokensFilePath(): string {
+  const configDir = path.join(os.homedir(), '.config', 'mcp-gsheets-server');
+  return path.join(configDir, 'oauth-tokens.json');
+}
 
 export class GoogleAuthService {
   private oauth2Client: InstanceType<typeof google.auth.OAuth2>;
   private oauthServer: OAuthServer;
   private browserLauncher: BrowserLauncherService;
+  private tokensFile: string;
 
-  constructor() {
-    this.oauth2Client = new google.auth.OAuth2(
+  constructor(
+    oauth2Client?: InstanceType<typeof google.auth.OAuth2>,
+    oauthServer?: OAuthServer,
+    browserLauncher?: BrowserLauncherService,
+  ) {
+    this.oauth2Client = oauth2Client ?? new google.auth.OAuth2(
       config.googleClientId,
       config.googleClientSecret,
       config.googleRedirectUri
     );
-    this.oauthServer = new OAuthServer();
-    this.browserLauncher = new BrowserLauncherService();
+    this.oauthServer = oauthServer ?? new OAuthServer(this.oauth2Client);
+    this.browserLauncher = browserLauncher ?? new BrowserLauncherService();
+    this.tokensFile = getTokensFilePath();
     this.initializeAuth();
   }
 
   private async initializeAuth(): Promise<void> {
     try {
-      // Try to load existing tokens
       await this.loadStoredTokens();
       logger.info('Google Auth service initialized with stored tokens');
-    } catch (error) {
+    } catch {
       logger.warn('No stored tokens found, authentication required');
-      // Don't throw here - let the first API call trigger auth flow
     }
   }
 
   private async loadStoredTokens(): Promise<void> {
     try {
-      const tokensData = await fs.readFile(TOKENS_FILE, 'utf-8');
+      const tokensData = await fs.readFile(this.tokensFile, 'utf-8');
       const tokens = JSON.parse(tokensData);
       this.oauth2Client.setCredentials(tokens);
       logger.info('Loaded stored OAuth tokens');
-    } catch (error) {
+    } catch {
       throw new Error('No stored tokens available');
     }
   }
 
   private async saveTokens(tokens: OAuthTokens): Promise<void> {
     try {
-      await fs.writeFile(TOKENS_FILE, JSON.stringify(tokens, null, 2));
+      const dir = path.dirname(this.tokensFile);
+      await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+      await fs.writeFile(this.tokensFile, JSON.stringify(tokens, null, 2), { mode: 0o600 });
       logger.info('OAuth tokens saved to disk');
     } catch (error) {
       logger.error('Failed to save tokens', { error });
@@ -64,20 +68,19 @@ export class GoogleAuthService {
 
   async ensureAuthenticated(): Promise<void> {
     try {
-      // Check if we have valid credentials
       const credentials = this.oauth2Client.credentials;
       if (!credentials.access_token) {
         await this.authenticate();
         return;
       }
 
-      // Check if token is expired and refresh if needed
       if (credentials.expiry_date && Date.now() >= credentials.expiry_date) {
         if (credentials.refresh_token) {
           logger.info('Access token expired, refreshing...');
-          const { credentials: newCredentials } = await this.oauth2Client.refreshAccessToken();
+          const refreshResult = await this.oauth2Client.refreshAccessToken();
+          const newCredentials = refreshResult.credentials;
           this.oauth2Client.setCredentials(newCredentials);
-          await this.saveTokens(newCredentials);
+          await this.saveTokens(newCredentials as OAuthTokens);
           logger.info('Access token refreshed successfully');
         } else {
           logger.warn('No refresh token available, re-authentication required');
@@ -93,15 +96,12 @@ export class GoogleAuthService {
   private async authenticate(): Promise<void> {
     try {
       logger.info('Starting OAuth authentication flow...');
-      
-      // Generate the auth URL first
+
       const authUrl = this.oauthServer.generateAuthUrl();
-      
-      // Immediately open browser with the URL
+      const callbackPromise = this.oauthServer.waitForCallback();
       await this.browserLauncher.openUrl(authUrl);
-      
-      // Now start the auth flow and wait for completion
-      const { tokens } = await this.oauthServer.startAuthFlow();
+
+      const { tokens } = await callbackPromise;
 
       this.oauth2Client.setCredentials(tokens);
       await this.saveTokens(tokens);
@@ -110,12 +110,6 @@ export class GoogleAuthService {
       logger.error('OAuth authentication failed', { error });
       throw new Error('Failed to authenticate with Google APIs');
     }
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async getAuthClient(): Promise<any> {
-    await this.ensureAuthenticated();
-    return this.oauth2Client;
   }
 
   getSheetsClient() {

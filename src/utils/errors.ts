@@ -57,11 +57,11 @@ export function handleGoogleApiError(error: unknown): never {
   }
 
   if (apiError.code && apiError.code >= 400 && apiError.code < 500) {
-    throw new ValidationError(apiError.message || 'Invalid request');
+    throw new ValidationError('Invalid request to Google API');
   }
 
   throw new SheetsError(
-    apiError.message || 'An unexpected error occurred',
+    'An unexpected error occurred while communicating with Google APIs',
     'UNKNOWN_ERROR',
     apiError.code || 500
   );
