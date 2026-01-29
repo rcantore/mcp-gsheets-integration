@@ -3,15 +3,22 @@
  */
 
 export class McpError extends Error {
-  constructor(public code: string, message: string) {
+  constructor(public code: number, message: string) {
     super(message);
     this.name = 'McpError';
   }
 }
 
 export const ErrorCode = {
-  InvalidRequest: 'INVALID_REQUEST',
-  MethodNotFound: 'METHOD_NOT_FOUND',
-  InvalidParams: 'INVALID_PARAMS',
-  InternalError: 'INTERNAL_ERROR',
+  InvalidRequest: -32600,
+  MethodNotFound: -32601,
+  InvalidParams: -32602,
+  InternalError: -32603,
 };
+
+export const ListToolsRequestSchema = 'tools/list';
+export const CallToolRequestSchema = 'tools/call';
+export const ListResourcesRequestSchema = 'resources/list';
+export const ReadResourceRequestSchema = 'resources/read';
+export const ListPromptsRequestSchema = 'prompts/list';
+export const GetPromptRequestSchema = 'prompts/get';

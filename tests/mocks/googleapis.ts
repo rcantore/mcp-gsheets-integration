@@ -5,6 +5,7 @@
 export const mockGoogleAuth = {
   OAuth2: jest.fn().mockImplementation(() => ({
     setCredentials: jest.fn(),
+    credentials: {},
     getAccessToken: jest.fn(),
     refreshAccessToken: jest.fn().mockResolvedValue({
       credentials: {
@@ -31,13 +32,19 @@ export const mockGoogleSheets = {
         spreadsheetId: 'mock-sheet-id',
         properties: {
           title: 'Mock Sheet',
+          locale: 'en_US',
+          timeZone: 'America/New_York',
         },
+        spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/mock-sheet-id',
         sheets: [{
           properties: {
             title: 'Sheet1',
             sheetId: 0,
+            index: 0,
+            gridProperties: { rowCount: 1000, columnCount: 26 },
           }
-        }]
+        }],
+        namedRanges: [],
       }
     }),
     create: jest.fn().mockResolvedValue({
@@ -47,6 +54,19 @@ export const mockGoogleSheets = {
           title: 'New Mock Sheet',
         },
         spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/new-mock-sheet-id'
+      }
+    }),
+    batchUpdate: jest.fn().mockResolvedValue({
+      data: {
+        replies: [{
+          addSheet: {
+            properties: {
+              sheetId: 1,
+              title: 'New Tab',
+              index: 1,
+            }
+          }
+        }],
       }
     }),
     values: {
@@ -70,6 +90,35 @@ export const mockGoogleSheets = {
           updatedCells: 9,
         }
       }),
+      append: jest.fn().mockResolvedValue({
+        data: {
+          spreadsheetId: 'mock-sheet-id',
+          updates: { updatedRows: 1 },
+        }
+      }),
+      clear: jest.fn().mockResolvedValue({
+        data: {
+          spreadsheetId: 'mock-sheet-id',
+          clearedRange: 'A1:C3',
+        }
+      }),
+      batchGet: jest.fn().mockResolvedValue({
+        data: {
+          spreadsheetId: 'mock-sheet-id',
+          valueRanges: [
+            { range: 'A1:B2', values: [['a', 'b'], ['c', 'd']] },
+            { range: 'C1:D2', values: [['e', 'f'], ['g', 'h']] },
+          ],
+        }
+      }),
+      batchUpdate: jest.fn().mockResolvedValue({
+        data: {
+          spreadsheetId: 'mock-sheet-id',
+          totalUpdatedRows: 2,
+          totalUpdatedColumns: 2,
+          totalUpdatedCells: 4,
+        }
+      }),
     }
   }
 };
@@ -83,20 +132,25 @@ export const mockGoogleDrive = {
             id: 'mock-sheet-id-1',
             name: 'Test Sheet 1',
             mimeType: 'application/vnd.google-apps.spreadsheet',
+            webViewLink: 'https://docs.google.com/spreadsheets/d/mock-sheet-id-1',
             createdTime: '2023-01-01T00:00:00.000Z',
             modifiedTime: '2023-01-02T00:00:00.000Z',
+            owners: [{ displayName: 'Test User' }],
           },
           {
-            id: 'mock-sheet-id-2', 
+            id: 'mock-sheet-id-2',
             name: 'Test Sheet 2',
             mimeType: 'application/vnd.google-apps.spreadsheet',
+            webViewLink: 'https://docs.google.com/spreadsheets/d/mock-sheet-id-2',
             createdTime: '2023-01-03T00:00:00.000Z',
             modifiedTime: '2023-01-04T00:00:00.000Z',
+            owners: [{ displayName: 'Test User' }],
           }
         ]
       }
     }),
     delete: jest.fn().mockResolvedValue({ data: {} }),
+    update: jest.fn().mockResolvedValue({ data: {} }),
   }
 };
 

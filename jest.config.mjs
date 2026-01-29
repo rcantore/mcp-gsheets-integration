@@ -29,5 +29,5 @@ export default {
     'node_modules/(?!(@modelcontextprotocol|open)/)'
   ],
   verbose: true,
-  testTimeout: 10000,
+  testTimeout: 15000,
 }

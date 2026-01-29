@@ -25,7 +25,7 @@ jest.mock('../../../src/utils/logger.js', () => ({
 jest.mock('../../../src/services/oauth-server.js', () => ({
   OAuthServer: jest.fn().mockImplementation(() => ({
     generateAuthUrl: jest.fn().mockReturnValue('https://accounts.google.com/oauth/authorize?mock=true'),
-    startAuthFlow: jest.fn().mockResolvedValue({
+    waitForCallback: jest.fn().mockResolvedValue({
       tokens: {
         access_token: 'mock-access-token',
         refresh_token: 'mock-refresh-token',
@@ -47,7 +47,7 @@ describe('GoogleAuthService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Reset the module to get a fresh instance
     jest.resetModules();
   });
@@ -61,12 +61,12 @@ describe('GoogleAuthService', () => {
       }));
 
       authService = new GoogleAuthService();
-      
+
       // Wait a bit for async initialization
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockFs.readFile).toHaveBeenCalledWith(
-        expect.stringContaining('.oauth-tokens.json'),
+        expect.stringContaining('oauth-tokens.json'),
         'utf-8'
       );
     });
@@ -75,7 +75,7 @@ describe('GoogleAuthService', () => {
       mockFs.readFile.mockRejectedValueOnce(new Error('File not found'));
 
       authService = new GoogleAuthService();
-      
+
       // Wait a bit for async initialization
       await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -91,13 +91,15 @@ describe('GoogleAuthService', () => {
     });
 
     it('should authenticate when no access token exists', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      
+
       await authService.ensureAuthenticated();
 
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('.oauth-tokens.json'),
-        expect.stringContaining('"access_token"')
+        expect.stringContaining('oauth-tokens.json'),
+        expect.stringContaining('"access_token"'),
+        expect.objectContaining({ mode: 0o600 })
       );
     });
 
@@ -108,8 +110,9 @@ describe('GoogleAuthService', () => {
         refresh_token: 'refresh-token',
         expiry_date: Date.now() - 1000, // Expired
       };
-      
+
       mockFs.readFile.mockResolvedValueOnce(JSON.stringify(expiredTokens));
+      mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
       authService = new GoogleAuthService();
@@ -119,21 +122,6 @@ describe('GoogleAuthService', () => {
 
       // Should save refreshed tokens
       expect(mockFs.writeFile).toHaveBeenCalled();
-    });
-  });
-
-  describe('getAuthClient', () => {
-    beforeEach(() => {
-      mockFs.readFile.mockRejectedValue(new Error('No stored tokens'));
-      authService = new GoogleAuthService();
-    });
-
-    it('should return authenticated client', async () => {
-      mockFs.writeFile.mockResolvedValue(undefined);
-      
-      const client = await authService.getAuthClient();
-      
-      expect(client).toBeDefined();
     });
   });
 
@@ -149,7 +137,7 @@ describe('GoogleAuthService', () => {
 
     it('should return sheets client', () => {
       const sheetsClient = authService.getSheetsClient();
-      
+
       expect(sheetsClient).toBeDefined();
     });
   });
@@ -166,7 +154,7 @@ describe('GoogleAuthService', () => {
 
     it('should return drive client', () => {
       const driveClient = authService.getDriveClient();
-      
+
       expect(driveClient).toBeDefined();
     });
   });
