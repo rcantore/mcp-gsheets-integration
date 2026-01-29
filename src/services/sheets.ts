@@ -7,23 +7,30 @@ import {
   CreateSheetRequest,
   UpdateSheetRequest,
   FindSheetsRequest,
+  AppendValuesRequest,
+  BatchUpdateRequest,
+  AddSheetTabRequest,
 } from '../types/sheets.js';
+
+function escapeDriveQuery(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
 
 export class GoogleSheetsService {
   private authService: GoogleAuthService;
 
-  constructor() {
-    this.authService = new GoogleAuthService();
+  constructor(authService?: GoogleAuthService) {
+    this.authService = authService ?? new GoogleAuthService();
   }
 
   async findSheets(request: FindSheetsRequest): Promise<SheetMetadata[]> {
     try {
       await this.authService.ensureAuthenticated();
       const drive = this.authService.getDriveClient();
-      
+
       let query = "mimeType='application/vnd.google-apps.spreadsheet'";
       if (request.query) {
-        query += ` and name contains '${request.query}'`;
+        query += ` and name contains '${escapeDriveQuery(request.query)}'`;
       }
 
       const response = await drive.files.list({
@@ -58,9 +65,9 @@ export class GoogleSheetsService {
     try {
       await this.authService.ensureAuthenticated();
       const sheets = this.authService.getSheetsClient();
-      
+
       const effectiveRange = range || 'A1:Z1000';
-      
+
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: sheetId,
         range: effectiveRange,
@@ -143,17 +150,17 @@ export class GoogleSheetsService {
       await sheets.spreadsheets.values.update({
         spreadsheetId: request.sheetId,
         range: request.range,
-        valueInputOption: 'RAW',
+        valueInputOption: request.valueInputOption ?? 'RAW',
         requestBody: {
           values: request.values,
           majorDimension: request.majorDimension,
         },
       });
 
-      logger.info(`Updated sheet data`, { 
-        sheetId: request.sheetId, 
-        range: request.range, 
-        cellCount: request.values.length * (request.values[0]?.length || 0) 
+      logger.info(`Updated sheet data`, {
+        sheetId: request.sheetId,
+        range: request.range,
+        cellCount: request.values.length * (request.values[0]?.length || 0)
       });
     } catch (error) {
       logger.error('Failed to update sheet', { error, request });
@@ -166,13 +173,220 @@ export class GoogleSheetsService {
       await this.authService.ensureAuthenticated();
       const drive = this.authService.getDriveClient();
 
-      await drive.files.delete({
+      await drive.files.update({
         fileId: sheetId,
+        requestBody: { trashed: true },
       });
 
-      logger.info(`Deleted sheet`, { sheetId });
+      logger.info(`Trashed sheet`, { sheetId });
     } catch (error) {
-      logger.error('Failed to delete sheet', { error, sheetId });
+      logger.error('Failed to trash sheet', { error, sheetId });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async appendValues(request: AppendValuesRequest): Promise<void> {
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: request.sheetId,
+        range: request.range,
+        valueInputOption: request.valueInputOption ?? 'RAW',
+        requestBody: {
+          values: request.values,
+        },
+      });
+
+      logger.info(`Appended values`, {
+        sheetId: request.sheetId,
+        range: request.range,
+        rowCount: request.values.length,
+      });
+    } catch (error) {
+      logger.error('Failed to append values', { error, request });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async clearRange(sheetId: string, range: string): Promise<void> {
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId: sheetId,
+        range,
+      });
+
+      logger.info(`Cleared range`, { sheetId, range });
+    } catch (error) {
+      logger.error('Failed to clear range', { error, sheetId, range });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async batchGet(sheetId: string, ranges: string[]): Promise<Record<string, string[][]>> {
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      const response = await sheets.spreadsheets.values.batchGet({
+        spreadsheetId: sheetId,
+        ranges,
+      });
+
+      const result: Record<string, string[][]> = {};
+      for (const valueRange of response.data.valueRanges || []) {
+        if (valueRange.range) {
+          result[valueRange.range] = (valueRange.values || []) as string[][];
+        }
+      }
+
+      logger.info(`Batch get completed`, { sheetId, rangeCount: ranges.length });
+      return result;
+    } catch (error) {
+      logger.error('Failed to batch get', { error, sheetId, ranges });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async batchUpdate(request: BatchUpdateRequest): Promise<void> {
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: request.sheetId,
+        requestBody: {
+          valueInputOption: request.valueInputOption ?? 'RAW',
+          data: request.data.map(d => ({
+            range: d.range,
+            values: d.values,
+          })),
+        },
+      });
+
+      logger.info(`Batch update completed`, { sheetId: request.sheetId, rangeCount: request.data.length });
+    } catch (error) {
+      logger.error('Failed to batch update', { error, request });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async getSpreadsheetInfo(sheetId: string): Promise<Record<string, unknown>> {
+    if (!sheetId?.trim()) {
+      throw new ValidationError('Sheet ID is required');
+    }
+
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      const response = await sheets.spreadsheets.get({
+        spreadsheetId: sheetId,
+      });
+
+      const info = {
+        spreadsheetId: response.data.spreadsheetId,
+        title: response.data.properties?.title,
+        locale: response.data.properties?.locale,
+        timeZone: response.data.properties?.timeZone,
+        url: response.data.spreadsheetUrl,
+        sheets: (response.data.sheets || []).map(s => ({
+          sheetId: s.properties?.sheetId,
+          title: s.properties?.title,
+          index: s.properties?.index,
+          rowCount: s.properties?.gridProperties?.rowCount,
+          columnCount: s.properties?.gridProperties?.columnCount,
+        })),
+        namedRanges: response.data.namedRanges?.map(nr => ({
+          name: nr.name,
+          range: nr.range,
+        })) || [],
+      };
+
+      logger.info(`Retrieved spreadsheet info`, { sheetId });
+      return info;
+    } catch (error) {
+      logger.error('Failed to get spreadsheet info', { error, sheetId });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async addSheetTab(request: AddSheetTabRequest): Promise<{ sheetId: number; title: string }> {
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      const addRequest: Record<string, unknown> = { title: request.title };
+      if (request.rowCount || request.columnCount) {
+        addRequest['gridProperties'] = {
+          ...(request.rowCount ? { rowCount: request.rowCount } : {}),
+          ...(request.columnCount ? { columnCount: request.columnCount } : {}),
+        };
+      }
+
+      const response = await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: request.sheetId,
+        requestBody: {
+          requests: [{ addSheet: { properties: addRequest } }],
+        },
+      });
+
+      const addedSheet = response.data.replies?.[0]?.addSheet?.properties;
+
+      logger.info(`Added sheet tab`, { sheetId: request.sheetId, title: request.title });
+      return {
+        sheetId: addedSheet?.sheetId ?? 0,
+        title: addedSheet?.title ?? request.title,
+      };
+    } catch (error) {
+      logger.error('Failed to add sheet tab', { error, request });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async deleteSheetTab(sheetId: string, tabId: number): Promise<void> {
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: sheetId,
+        requestBody: {
+          requests: [{ deleteSheet: { sheetId: tabId } }],
+        },
+      });
+
+      logger.info(`Deleted sheet tab`, { sheetId, tabId });
+    } catch (error) {
+      logger.error('Failed to delete sheet tab', { error, sheetId, tabId });
+      handleGoogleApiError(error);
+    }
+  }
+
+  async renameSheetTab(sheetId: string, tabId: number, newTitle: string): Promise<void> {
+    try {
+      await this.authService.ensureAuthenticated();
+      const sheets = this.authService.getSheetsClient();
+
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: sheetId,
+        requestBody: {
+          requests: [{
+            updateSheetProperties: {
+              properties: { sheetId: tabId, title: newTitle },
+              fields: 'title',
+            },
+          }],
+        },
+      });
+
+      logger.info(`Renamed sheet tab`, { sheetId, tabId, newTitle });
+    } catch (error) {
+      logger.error('Failed to rename sheet tab', { error, sheetId, tabId, newTitle });
       handleGoogleApiError(error);
     }
   }
